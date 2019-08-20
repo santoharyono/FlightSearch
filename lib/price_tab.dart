@@ -1,4 +1,7 @@
+import 'package:flight_search/animated_dot.dart';
 import 'package:flight_search/animated_plane_icon.dart';
+import 'package:flight_search/flight_stop.dart';
+import 'package:flight_search/flight_stop_card.dart';
 import 'package:flutter/material.dart';
 
 class PriceTab extends StatefulWidget {
@@ -14,9 +17,18 @@ class PriceTab extends StatefulWidget {
 class _PriceTabState extends State<PriceTab> with TickerProviderStateMixin {
   final double _initialPlanePaddingBottom = 16.0;
   final double _minPlanePaddingTop = 16.0;
+  final List<FlightStop> _flightStops = [
+    FlightStop("JFK", "ORY", "JUN 05", "6h 25m", "\$851", "9:26 am - 3:43 pm"),
+    FlightStop("MRG", "FTB", "JUN 20", "6h 25m", "\$532", "9:26 am - 3:43 pm"),
+    FlightStop("ERT", "TVS", "JUN 20", "6h 25m", "\$718", "9:26 am - 3:43 pm"),
+    FlightStop("KKR", "RTY", "JUN 20", "6h 25m", "\$663", "9:26 am - 3:43 pm"),
+  ];
+  final double _cardHeight = 80.0;
 
   AnimationController _planeSizeAnimationController;
   AnimationController _planeTravelController;
+  AnimationController _dotsAnimationController;
+  List<Animation<double>> _dotPositions = [];
   Animation _planeSizeAnimation;
   Animation _planeTravelAnimation;
 
@@ -32,6 +44,8 @@ class _PriceTabState extends State<PriceTab> with TickerProviderStateMixin {
     super.initState();
     _initSizeAnimations();
     _initPlaneTravelAnimations();
+    _initDotAnimationController();
+    _initDotAnimations();
     _planeSizeAnimationController.forward();
   }
 
@@ -41,22 +55,21 @@ class _PriceTabState extends State<PriceTab> with TickerProviderStateMixin {
       width: double.infinity,
       child: Stack(
         alignment: Alignment.center,
-        children: <Widget>[_buildPlane()],
+        children: <Widget>[_buildPlane()]
+          ..addAll(_flightStops.map(_buildStopCard))
+          ..addAll(_flightStops.map(_mapFlightStopToDot)),
       ),
     );
   }
 
+  Widget _mapFlightStopToDot(stop) {
+    int index = _flightStops.indexOf(stop);
+    bool isStartOrEnd = index == 0 || index == _flightStops.length - 1;
+    Color color = isStartOrEnd ? Colors.red : Colors.green;
+    return AnimatedDot(animation: _dotPositions[index], color: color);
+  }
+
   Widget _buildPlane() {
-//    return Positioned(
-//      top: _planeTopPadding,
-//      child: Column(
-//        children: <Widget>[
-//          AnimatedPlaneIcon(
-//            animation: _planeSizeAnimation,
-//          )
-//        ],
-//      ),
-//    );
     return AnimatedBuilder(
       animation: _planeTravelAnimation,
       builder: (context, child) => Positioned(
@@ -70,10 +83,41 @@ class _PriceTabState extends State<PriceTab> with TickerProviderStateMixin {
           ),
           Container(
             width: 2.0,
-            height: 240.0,
+            height: _flightStops.length * _cardHeight * 0.8,
             color: Color.fromARGB(255, 200, 200, 200),
           )
         ],
+      ),
+    );
+  }
+
+  Widget _buildStopCard(FlightStop stop) {
+    int index = _flightStops.indexOf(stop);
+    double topMargin = _dotPositions[index].value -
+        0.5 * (FlightStopCard.height - AnimatedDot.size);
+    bool isLeft = index.isOdd;
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: EdgeInsets.only(top: topMargin),
+        child: Row(
+          mainAxisSize: MainAxisSize.max,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            isLeft ? Container() : Expanded(child: Container()),
+            Expanded(
+                child: FlightStopCard(
+              isLeft: isLeft,
+              flightStop: stop,
+            )),
+            !isLeft
+                ? Container()
+                : Expanded(
+                    child: Container(),
+                  )
+          ],
+        ),
       ),
     );
   }
@@ -86,6 +130,9 @@ class _PriceTabState extends State<PriceTab> with TickerProviderStateMixin {
               Future.delayed(Duration(milliseconds: 500), () {
                 widget?.onPlaneFlightStart();
                 _planeTravelController.forward();
+              });
+              Future.delayed(Duration(milliseconds: 700), () {
+                _dotsAnimationController.forward();
               });
             }
           });
@@ -100,9 +147,37 @@ class _PriceTabState extends State<PriceTab> with TickerProviderStateMixin {
         parent: _planeTravelController, curve: Curves.fastOutSlowIn);
   }
 
+  void _initDotAnimations() {
+    final double slideDurationInterval = 0.4;
+    final double slideDelayInterval = 0.2;
+    double startingMarginTop = widget.height;
+    double minMarginTop =
+        _minPlanePaddingTop + _planeSize + 0.5 * (0.8 * _cardHeight);
+
+    for (int i = 0; i < _flightStops.length; i++) {
+      final start = slideDelayInterval * i;
+      final end = start + slideDurationInterval;
+
+      double finalMarginTop = minMarginTop + i * (0.8 * _cardHeight);
+      Animation<double> animation =
+          Tween(begin: startingMarginTop, end: finalMarginTop).animate(
+              CurvedAnimation(
+                  parent: _dotsAnimationController,
+                  curve: Interval(start, end, curve: Curves.easeOut)));
+      _dotPositions.add(animation);
+    }
+  }
+
+  void _initDotAnimationController() {
+    _dotsAnimationController =
+        AnimationController(vsync: this, duration: Duration(milliseconds: 500));
+  }
+
   @override
   void dispose() {
     _planeSizeAnimationController.dispose();
+    _planeTravelController.dispose();
+    _dotsAnimationController.dispose();
     super.dispose();
   }
 }
